@@ -5,6 +5,7 @@ local defaults = {
   direction = "vertical",
   width_ratio = 0.45,
   height_ratio = 0.85,
+  auto_open = false,
   keymaps = {
     preview = "<leader>cg",
     close = "q",
@@ -61,7 +62,8 @@ local function open_window()
   return buf
 end
 
-function M.preview(path)
+function M.preview(path, o)
+  local popts = o or {}
   local file = path and vim.fn.expand(path) or vim.fn.expand("%:p")
   if file == "" then
     vim.notify("glow.nvim: no file to preview", vim.log.levels.WARN)
@@ -74,6 +76,7 @@ function M.preview(path)
 
   close_preview()
 
+  local prev_win = vim.api.nvim_get_current_win()
   local buf = open_window()
   preview_win = vim.api.nvim_get_current_win()
   vim.api.nvim_create_autocmd("WinClosed", {
@@ -82,6 +85,10 @@ function M.preview(path)
     callback = function() preview_win = nil end,
   })
   run_glow(buf, file)
+
+  if popts.keep_focus and vim.api.nvim_win_is_valid(prev_win) then
+    vim.api.nvim_set_current_win(prev_win)
+  end
 end
 
 function M.setup(opts)
@@ -95,6 +102,20 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("Glow", function(o)
     M.preview(o.args ~= "" and o.args or nil)
   end, { nargs = "?", desc = "Preview markdown in glow" })
+
+  if config.auto_open then
+    local group = vim.api.nvim_create_augroup("glow_nvim_auto", { clear = true })
+    vim.api.nvim_create_autocmd("FileType", {
+      group = group,
+      pattern = "markdown",
+      callback = function()
+        M.preview(nil, { keep_focus = true })
+      end,
+    })
+    if vim.bo.filetype == "markdown" and vim.fn.expand("%:p") ~= "" then
+      vim.schedule(function() M.preview(nil, { keep_focus = true }) end)
+    end
+  end
 end
 
 return M
