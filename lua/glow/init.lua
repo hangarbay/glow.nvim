@@ -2,8 +2,8 @@ local M = {}
 
 local defaults = {
   cmd = vim.fn.exepath("glow") ~= "" and vim.fn.exepath("glow") or "glow",
-  direction = "vertical",
-  width_ratio = 0.45,
+  direction = "float",
+  width_ratio = 0.8,
   height_ratio = 0.85,
   auto_open = false,
   keymaps = {
@@ -14,24 +14,45 @@ local defaults = {
 
 M.config = {}
 local preview_win = nil
+local preview_buf = nil
+local last_file = nil
+local job_id = nil
+local resize_pending = false
 
 local function is_markdown(file)
   return vim.bo.filetype == "markdown" or file:match("%.md$") or file:match("%.markdown$")
 end
 
 local function close_preview()
+  if job_id then
+    pcall(vim.fn.jobstop, job_id)
+    job_id = nil
+  end
   if preview_win and vim.api.nvim_win_is_valid(preview_win) then
     vim.api.nvim_win_close(preview_win, true)
   end
   preview_win = nil
+  preview_buf = nil
 end
 
-local function run_glow(buf, file)
-  local args = { M.config.cmd, file }
+local function render_width()
+  if not (preview_win and vim.api.nvim_win_is_valid(preview_win)) then
+    return 80
+  end
+  return math.max(vim.api.nvim_win_get_width(preview_win) - 4, 20)
+end
+
+local function run_glow(file)
+  if job_id then
+    pcall(vim.fn.jobstop, job_id)
+    job_id = nil
+  end
+  last_file = file
+  local args = { M.config.cmd, "-w", tostring(render_width()), file }
   if vim.fn.has("nvim-0.11") == 1 then
-    vim.fn.jobstart(args, { term = true })
+    job_id = vim.fn.jobstart(args, { term = true })
   else
-    vim.fn.termopen(args)
+    job_id = vim.fn.termopen(args)
   end
 end
 
@@ -46,7 +67,7 @@ local function open_window()
     vim.cmd("vertical resize " .. width)
     vim.api.nvim_win_set_buf(0, buf)
   else
-    local width = math.floor(vim.o.columns * M.config.width_ratio * 2)
+    local width = math.floor(vim.o.columns * M.config.width_ratio)
     local height = math.floor(vim.o.lines * M.config.height_ratio)
     vim.api.nvim_open_win(0, buf, true, {
       relative = "editor",
@@ -60,6 +81,17 @@ local function open_window()
   end
 
   return buf
+end
+
+local function schedule_rerender()
+  if resize_pending then return end
+  resize_pending = true
+  vim.defer_fn(function()
+    resize_pending = false
+    if preview_win and vim.api.nvim_win_is_valid(preview_win) and preview_buf and last_file then
+      run_glow(last_file)
+    end
+  end, 200)
 end
 
 function M.preview(path, o)
@@ -78,13 +110,31 @@ function M.preview(path, o)
 
   local prev_win = vim.api.nvim_get_current_win()
   local buf = open_window()
+  preview_buf = buf
   preview_win = vim.api.nvim_get_current_win()
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(preview_win),
     once = true,
-    callback = function() preview_win = nil end,
+    callback = function()
+      if job_id then
+        pcall(vim.fn.jobstop, job_id)
+        job_id = nil
+      end
+      preview_win = nil
+      preview_buf = nil
+    end,
   })
-  run_glow(buf, file)
+  run_glow(file)
+  if vim.fn.has("nvim-0.9") == 1 then
+    vim.api.nvim_create_autocmd("WinResized", {
+      group = vim.api.nvim_create_augroup("glow_nvim_resize", { clear = false }),
+      callback = function(args)
+        if preview_win and vim.tbl_contains(args.data.windows or {}, preview_win) then
+          schedule_rerender()
+        end
+      end,
+    })
+  end
 
   if popts.keep_focus and vim.api.nvim_win_is_valid(prev_win) then
     vim.api.nvim_set_current_win(prev_win)
