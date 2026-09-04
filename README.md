@@ -4,7 +4,7 @@ Neovim integration for [glow](https://github.com/charmbracelet/glow), the termin
 
 ## Features
 
-- **Floating preview** of the current markdown file, rendered by glow
+- **Vertical preview pane** on the right side (float optional) rendered by glow
 - **`q` to close** the preview window
 - **Optional file argument** -- preview any markdown file from anywhere
 - **Zero dependencies** -- no toggleterm, just glow on your PATH
@@ -29,12 +29,13 @@ All options with their defaults:
 
 ```lua
 require("glow").setup({
-  cmd = "glow",            -- path to the glow binary
-  width_ratio = 0.8,       -- float width as a ratio of columns
-  height_ratio = 0.85,     -- float height as a ratio of lines
+  cmd = "glow",              -- path to the glow binary
+  direction = "vertical",    -- "vertical" right pane, or "float"
+  width_ratio = 0.45,        -- pane width (vertical) as a ratio of columns
+  height_ratio = 0.85,       -- float height as a ratio of lines
   keymaps = {
-    preview = "<leader>cg", -- open preview for current file
-    close = "q",            -- close the preview window
+    preview = "<leader>cg",  -- open preview for current file
+    close = "q",             -- close the preview window
   },
 })
 ```

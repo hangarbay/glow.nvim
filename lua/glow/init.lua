@@ -2,7 +2,8 @@ local M = {}
 
 local defaults = {
   cmd = vim.fn.exepath("glow") ~= "" and vim.fn.exepath("glow") or "glow",
-  width_ratio = 0.8,
+  direction = "vertical",
+  width_ratio = 0.45,
   height_ratio = 0.85,
   keymaps = {
     preview = "<leader>cg",
@@ -33,6 +34,33 @@ local function run_glow(buf, file)
   end
 end
 
+local function open_window()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.keymap.set("n", M.config.keymaps.close, close_preview, { buffer = buf, silent = true })
+
+  if M.config.direction == "vertical" then
+    local width = math.floor(vim.o.columns * M.config.width_ratio)
+    vim.cmd("botright vsplit")
+    vim.cmd("vertical resize " .. width)
+    vim.api.nvim_win_set_buf(0, buf)
+  else
+    local width = math.floor(vim.o.columns * M.config.width_ratio * 2)
+    local height = math.floor(vim.o.lines * M.config.height_ratio)
+    vim.api.nvim_open_win(0, buf, true, {
+      relative = "editor",
+      width = width,
+      height = height,
+      col = math.floor((vim.o.columns - width) / 2),
+      row = math.floor((vim.o.lines - height) / 2),
+      border = "rounded",
+      style = "minimal",
+    })
+  end
+
+  return buf
+end
+
 function M.preview(path)
   local file = path and vim.fn.expand(path) or vim.fn.expand("%:p")
   if file == "" then
@@ -46,26 +74,13 @@ function M.preview(path)
 
   close_preview()
 
-  local width = math.floor(vim.o.columns * M.config.width_ratio)
-  local height = math.floor(vim.o.lines * M.config.height_ratio)
-  local buf = vim.api.nvim_create_buf(false, true)
-  preview_win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    col = math.floor((vim.o.columns - width) / 2),
-    row = math.floor((vim.o.lines - height) / 2),
-    border = "rounded",
-    style = "minimal",
-  })
-  vim.bo[buf].bufhidden = "wipe"
+  local buf = open_window()
+  preview_win = vim.api.nvim_get_current_win()
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(preview_win),
     once = true,
     callback = function() preview_win = nil end,
   })
-  vim.keymap.set("n", M.config.keymaps.close, close_preview, { buffer = buf, silent = true })
-
   run_glow(buf, file)
 end
 
