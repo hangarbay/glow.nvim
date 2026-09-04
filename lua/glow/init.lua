@@ -69,7 +69,7 @@ local function open_window()
   else
     local width = math.floor(vim.o.columns * M.config.width_ratio)
     local height = math.floor(vim.o.lines * M.config.height_ratio)
-    vim.api.nvim_open_win(0, buf, true, {
+    vim.api.nvim_open_win(buf, true, {
       relative = "editor",
       width = width,
       height = height,
